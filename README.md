@@ -1,50 +1,196 @@
-# Welcome to your Expo app 👋
+# Expense Tracking App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A comprehensive expense tracking and shopping list management app built with React Native and Expo.
 
-## Get started
+## Features
 
-1. Install dependencies
+### 🔐 Authentication
+- User sign up and sign in functionality
+- Secure authentication with AsyncStorage persistence
+- Automatic navigation based on authentication state
 
+### 📱 Item Library Management
+- Create items by taking photos or selecting from gallery
+- Add item details: name, price, category
+- View all items in a clean, organized library
+- Delete items with confirmation
+
+### 🛒 Shopping List Creation
+- Create shopping lists by selecting items from your library
+- Customize list names
+- Select multiple items for each list
+- Real-time item count and total cost calculation
+
+### 📋 Shopping List Management
+- View all shopping lists in card format
+- See list name, total cost, and item count at a glance
+- Tap lists to view detailed breakdown
+- Remove items from lists
+- Delete entire shopping lists
+
+### 📊 Profile & Statistics
+- User profile with avatar and information
+- Comprehensive statistics:
+  - Total items in library
+  - Number of shopping lists
+  - Total value of all items
+  - Total value of all shopping lists
+- Sign out functionality
+
+## Technical Stack
+
+- **Framework**: React Native with Expo
+- **Navigation**: Expo Router
+- **State Management**: React Context API
+- **Storage**: AsyncStorage for local data persistence
+- **Image Handling**: Expo Image Picker and Camera
+- **Styling**: React Native StyleSheet with theme support
+- **TypeScript**: Full type safety throughout the app
+
+## Project Structure
+
+```
+expense-tracking-app/
+├── app/                          # App screens and navigation
+│   ├── (tabs)/                  # Tab-based navigation
+│   │   ├── index.tsx            # Items library screen
+│   │   ├── shopping-lists.tsx   # Shopping lists screen
+│   │   └── profile.tsx          # User profile screen
+│   ├── auth/                    # Authentication screens
+│   │   ├── signin.tsx           # Sign in screen
+│   │   └── signup.tsx           # Sign up screen
+│   └── shopping-list/           # Shopping list detail
+│       └── [id].tsx             # Dynamic shopping list detail
+├── components/                   # Reusable components
+│   ├── AddItemModal.tsx         # Modal for adding new items
+│   ├── CreateShoppingListModal.tsx # Modal for creating lists
+│   └── ShoppingListCard.tsx     # Shopping list card component
+├── contexts/                     # React Context providers
+│   ├── AuthContext.tsx          # Authentication state management
+│   └── DataContext.tsx          # Items and shopping lists data
+├── types/                        # TypeScript type definitions
+│   └── index.ts                 # App data models
+└── constants/                    # App constants
+    └── Colors.ts                # Theme color definitions
+```
+
+## Getting Started
+
+1. **Install dependencies**:
    ```bash
    npm install
    ```
 
-2. Start the app
-
+2. **Start the development server**:
    ```bash
-   npx expo start
+   npm start
    ```
 
-In the output, you'll find options to open the app in a
+3. **Run on device/simulator**:
+   - Press `i` for iOS simulator
+   - Press `a` for Android emulator
+   - Scan QR code with Expo Go app on your device
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Key Components
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### Authentication Flow
+- Users start at sign-in screen
+- New users can navigate to sign-up
+- After authentication, users are redirected to main app
+- Authentication state persists across app restarts
 
-## Get a fresh project
+### Item Management
+- Camera integration for taking item photos
+- Image picker for selecting existing photos
+- Form validation for required fields
+- Real-time preview of selected images
 
-When you're ready, run:
+### Shopping List Workflow
+1. Add items to library with photos and details
+2. Create shopping lists by selecting items
+3. View lists with total costs and item counts
+4. Tap lists to see detailed breakdown
+5. Manage items within lists
 
-```bash
-npm run reset-project
+## Data Models
+
+### Item
+```typescript
+interface Item {
+  id: string;
+  name: string;
+  price: number;
+  imageUri?: string;
+  category?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### ShoppingList
+```typescript
+interface ShoppingList {
+  id: string;
+  name: string;
+  items: ShoppingListItem[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
 
-## Learn more
+### ShoppingListItem
+```typescript
+interface ShoppingListItem {
+  itemId: string;
+  quantity: number;
+  item: Item;
+}
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+## Features in Detail
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### Camera Integration
+- Request camera permissions
+- Take photos with custom aspect ratio
+- Image quality optimization
+- Edit photos before saving
 
-## Join the community
+### Image Management
+- Support for both camera and gallery
+- Image preview with remove option
+- Fallback placeholder for items without images
+- Optimized image storage
 
-Join our community of developers creating universal apps.
+### Shopping List Creation
+- Multi-select interface for items
+- Real-time selection feedback
+- Validation for list names and item selection
+- Smooth modal interactions
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### Data Persistence
+- Local storage using AsyncStorage
+- Automatic data loading on app start
+- Real-time updates across all screens
+- Data integrity with proper error handling
+
+## Future Enhancements
+
+- Cloud synchronization
+- Multiple user support
+- Advanced analytics and reporting
+- Export functionality
+- Barcode scanning for items
+- Price history tracking
+- Budget management features
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License.
