@@ -4,7 +4,7 @@ import { useData } from '@/contexts/DataContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { Item } from '@/types';
 import * as ImagePicker from 'expo-image-picker';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Image,
@@ -20,15 +20,15 @@ import {
   View,
 } from 'react-native';
 
-interface AddItemModalProps {
+interface EditItemModalProps {
   visible: boolean;
+  item: Item | null;
   onClose: () => void;
-  onItemCreated?: (item: Item) => void;
 }
 
 const RECURRENCE_OPTIONS = ['weekly', 'monthly', 'yearly'] as const;
 
-export default function AddItemModal({ visible, onClose, onItemCreated }: AddItemModalProps) {
+export default function EditItemModal({ visible, item, onClose }: EditItemModalProps) {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
@@ -38,9 +38,20 @@ export default function AddItemModal({ visible, onClose, onItemCreated }: AddIte
   const [isLoading, setIsLoading] = useState(false);
   const [isScannerVisible, setIsScannerVisible] = useState(false);
 
-  const { addItem } = useData();
+  const { updateItem } = useData();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
+
+  useEffect(() => {
+    if (item) {
+      setName(item.name);
+      setPrice(item.price.toString());
+      setCategory(item.description ?? '');
+      setImageUri(item.image_url ?? null);
+      setIsRecurring(item.is_recurring ?? false);
+      setRecurrencePeriod(item.recurrence_period ?? 'monthly');
+    }
+  }, [item]);
 
   const takePicture = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -88,6 +99,8 @@ export default function AddItemModal({ visible, onClose, onItemCreated }: AddIte
   };
 
   const handleSubmit = async () => {
+    if (!item) return;
+
     if (!name.trim() || !price.trim()) {
       Alert.alert('Error', 'Please fill in name and price');
       return;
@@ -101,26 +114,17 @@ export default function AddItemModal({ visible, onClose, onItemCreated }: AddIte
 
     setIsLoading(true);
     try {
-      const newItem = await addItem({
+      await updateItem(item.id, {
         name: name.trim(),
         price: priceValue,
-        category: category.trim() || undefined,
-        imageUri: imageUri || undefined,
+        description: category.trim() || undefined,
+        image_url: imageUri || undefined,
         is_recurring: isRecurring,
         recurrence_period: isRecurring ? recurrencePeriod : undefined,
       });
-
-      setName('');
-      setPrice('');
-      setCategory('');
-      setImageUri(null);
-      setIsRecurring(false);
-      setRecurrencePeriod('monthly');
-      onItemCreated?.(newItem);
       onClose();
     } catch (error) {
-      console.error('Error adding item:', error);
-      Alert.alert('Error', 'Failed to add item. Please try again.');
+      Alert.alert('Error', 'Failed to update item. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -139,7 +143,7 @@ export default function AddItemModal({ visible, onClose, onItemCreated }: AddIte
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <View style={[styles.header, { borderBottomColor: colors.border }]}>
-            <Text style={[styles.title, { color: colors.text }]}>Add New Item</Text>
+            <Text style={[styles.title, { color: colors.text }]}>Edit Item</Text>
             <TouchableOpacity onPress={onClose} style={styles.closeButton}>
               <Text style={[styles.closeText, { color: colors.tint }]}>Cancel</Text>
             </TouchableOpacity>
@@ -280,7 +284,7 @@ export default function AddItemModal({ visible, onClose, onItemCreated }: AddIte
                 disabled={isLoading}
               >
                 <Text style={styles.submitButtonText}>
-                  {isLoading ? 'Adding...' : 'Add Item'}
+                  {isLoading ? 'Saving...' : 'Save Changes'}
                 </Text>
               </TouchableOpacity>
             </View>

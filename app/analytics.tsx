@@ -1,3 +1,4 @@
+import { formatCurrency } from '@/lib/currency';
 import { Colors } from '@/constants/Colors';
 import { useData } from '@/contexts/DataContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -106,11 +107,11 @@ export default function AnalyticsScreen() {
                 <Text style={[styles.summaryLabel, { color: colors.text }]}>Total Items</Text>
               </View>
               <View style={[styles.summaryCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                <Text style={[styles.summaryNumber, { color: colors.tint }]}>${avgPrice.toFixed(2)}</Text>
+                <Text style={[styles.summaryNumber, { color: colors.tint }]}>{formatCurrency(avgPrice)}</Text>
                 <Text style={[styles.summaryLabel, { color: colors.text }]}>Avg Price</Text>
               </View>
               <View style={[styles.summaryCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
-                <Text style={[styles.summaryNumber, { color: colors.tint }]}>${totalValue.toFixed(2)}</Text>
+                <Text style={[styles.summaryNumber, { color: colors.tint }]}>{formatCurrency(totalValue)}</Text>
                 <Text style={[styles.summaryLabel, { color: colors.text }]}>Library Value</Text>
               </View>
               <View style={[styles.summaryCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
@@ -162,7 +163,7 @@ export default function AnalyticsScreen() {
               <Text style={[styles.insightText, { color: colors.text }]}>
                 Your largest spending category is <Text style={{ fontWeight: 'bold' }}>{topCategory}</Text>.{' '}
                 You have {shoppingLists.length} shopping list{shoppingLists.length !== 1 ? 's' : ''} with a combined value of{' '}
-                ${shoppingLists.reduce((s, l) => s + (l.items || []).reduce((t, i) => t + i.item.price * (i.quantity || 1), 0), 0).toFixed(2)}.
+                {formatCurrency(shoppingLists.reduce((s, l) => s + (l.items || []).reduce((t, i) => t + i.item.price * (i.quantity || 1), 0), 0))}.
               </Text>
             </View>
           </>

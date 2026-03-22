@@ -18,7 +18,7 @@ CREATE POLICY "Owners can manage shares" ON shared_lists
 -- Recipients can view shares directed to them
 CREATE POLICY "Recipients can view their shares" ON shared_lists
   FOR SELECT USING (
-    shared_with_email = (SELECT email FROM auth.users WHERE id = auth.uid())
+    shared_with_email = auth.email()
   );
 
 -- Allow recipients to see the shared shopping list
@@ -28,7 +28,7 @@ CREATE POLICY "Recipients can view shared shopping lists" ON shopping_lists
     EXISTS (
       SELECT 1 FROM shared_lists
       WHERE shared_lists.list_id = shopping_lists.id
-      AND shared_lists.shared_with_email = (SELECT email FROM auth.users WHERE id = auth.uid())
+      AND shared_lists.shared_with_email = auth.email()
     )
   );
 
@@ -43,7 +43,7 @@ CREATE POLICY "Recipients with edit can modify shared list items" ON shopping_li
         OR EXISTS (
           SELECT 1 FROM shared_lists
           WHERE shared_lists.list_id = sl.id
-          AND shared_lists.shared_with_email = (SELECT email FROM auth.users WHERE id = auth.uid())
+          AND shared_lists.shared_with_email = auth.email()
           AND shared_lists.permission = 'edit'
         )
       )

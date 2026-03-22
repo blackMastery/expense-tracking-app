@@ -37,6 +37,8 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="auth" options={{ headerShown: false }} />
       <Stack.Screen name="shopping-list" options={{ headerShown: false }} />
+      <Stack.Screen name="budget" options={{ headerShown: false }} />
+      <Stack.Screen name="analytics" options={{ headerShown: false }} />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

@@ -1,3 +1,4 @@
+import { formatCurrency } from '@/lib/currency';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ShoppingList } from '@/types';
@@ -40,7 +41,7 @@ export default function ShoppingListCard({ shoppingList, onPress }: ShoppingList
 
       <View style={styles.details}>
         <Text style={[styles.totalCost, { color: Colors[colorScheme ?? 'light'].tint }]}>
-          ${totalCost.toFixed(2)}
+          {formatCurrency(totalCost)}
         </Text>
         <Text style={[styles.itemCount, { color: Colors[colorScheme ?? 'light'].tabIconDefault }]}>
           {itemCount} {itemCount === 1 ? 'item' : 'items'}

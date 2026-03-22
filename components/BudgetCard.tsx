@@ -1,3 +1,4 @@
+import { formatCurrency } from '@/lib/currency';
 import { Colors } from '@/constants/Colors';
 import { useData } from '@/contexts/DataContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -67,10 +68,10 @@ export default function BudgetCard({ budget, onEdit, onDelete }: BudgetCardProps
 
       <View style={styles.amountRow}>
         <Text style={[styles.spent, { color: isOverBudget ? '#ff4444' : colors.text }]}>
-          ${spent.toFixed(2)}
+          {formatCurrency(spent)}
         </Text>
         <Text style={[styles.limit, { color: colors.tabIconDefault }]}>
-          / ${budget.amount.toFixed(2)} {budget.period}
+          / {formatCurrency(budget.amount)} {budget.period}
         </Text>
       </View>
 
@@ -81,8 +82,8 @@ export default function BudgetCard({ budget, onEdit, onDelete }: BudgetCardProps
 
       <Text style={[styles.statusText, { color: isOverBudget ? '#ff4444' : colors.tabIconDefault }]}>
         {isOverBudget
-          ? `Over budget by $${(spent - budget.amount).toFixed(2)}`
-          : `$${(budget.amount - spent).toFixed(2)} remaining`}
+          ? `Over budget by ${formatCurrency(spent - budget.amount)}`
+          : `${formatCurrency(budget.amount - spent)} remaining`}
       </Text>
     </View>
   );

@@ -1,5 +1,7 @@
 import AddItemModal from '@/components/AddItemModal';
+import EditItemModal from '@/components/EditItemModal';
 import PriceHistoryModal from '@/components/PriceHistoryModal';
+import { formatCurrency } from '@/lib/currency';
 import { Colors } from '@/constants/Colors';
 import { useData } from '@/contexts/DataContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -19,6 +21,7 @@ import {
 
 export default function ItemsScreen() {
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
+  const [editItem, setEditItem] = useState<Item | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [historyItem, setHistoryItem] = useState<Item | null>(null);
@@ -96,7 +99,7 @@ export default function ItemsScreen() {
           )}
         </View>
         <Text style={[styles.itemPrice, { color: colors.tint }]}>
-          ${item.price.toFixed(2)}
+          {formatCurrency(item.price)}
         </Text>
         {item.description && (
           <Text style={[styles.itemCategory, { color: colors.tabIconDefault }]}>
@@ -111,6 +114,12 @@ export default function ItemsScreen() {
           onPress={() => setHistoryItem(item)}
         >
           <Text style={[styles.historyButtonText, { color: colors.text }]}>$</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.editButton, { backgroundColor: colors.tint }]}
+          onPress={() => setEditItem(item)}
+        >
+          <Text style={styles.editButtonText}>✎</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.deleteButton, { backgroundColor: '#ff4444' }]}
@@ -241,6 +250,12 @@ export default function ItemsScreen() {
         onClose={() => setIsAddModalVisible(false)}
       />
 
+      <EditItemModal
+        visible={editItem !== null}
+        item={editItem}
+        onClose={() => setEditItem(null)}
+      />
+
       <PriceHistoryModal
         visible={historyItem !== null}
         item={historyItem}
@@ -337,6 +352,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   historyButtonText: { fontSize: 14, fontWeight: 'bold' },
+  editButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editButtonText: { color: 'white', fontSize: 14, fontWeight: 'bold' },
   deleteButton: {
     width: 30,
     height: 30,

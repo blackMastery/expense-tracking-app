@@ -1,3 +1,4 @@
+import { formatCurrency } from '@/lib/currency';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { getPriceHistory } from '@/lib/supabase-utils';
@@ -72,7 +73,7 @@ export default function PriceHistoryModal({ visible, item, onClose }: PriceHisto
           <View style={[styles.itemInfo, { borderBottomColor: colors.border }]}>
             <Text style={[styles.itemName, { color: colors.text }]}>{item.name}</Text>
             <Text style={[styles.currentPrice, { color: colors.tint }]}>
-              Current: ${item.price.toFixed(2)}
+              {`Current: ${formatCurrency(item.price)}`}
             </Text>
           </View>
         )}
@@ -107,11 +108,11 @@ export default function PriceHistoryModal({ visible, item, onClose }: PriceHisto
                   </View>
                   <View style={styles.historyRight}>
                     <Text style={[styles.historyPrice, { color: colors.text }]}>
-                      ${h.price.toFixed(2)}
+                      {formatCurrency(h.price)}
                     </Text>
                     {change !== 0 && (
                       <Text style={[styles.priceChange, { color: change > 0 ? '#ff4444' : '#4CAF50' }]}>
-                        {change > 0 ? '↑' : '↓'} ${Math.abs(change).toFixed(2)}
+                        {`${change > 0 ? '↑' : '↓'} ${formatCurrency(Math.abs(change))}`}
                       </Text>
                     )}
                   </View>

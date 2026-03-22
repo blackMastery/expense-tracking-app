@@ -7,6 +7,7 @@ import {
   deleteShoppingList as deleteShoppingListInSupabase,
   addItemToShoppingList as addItemToShoppingListInSupabase,
   removeItemFromShoppingList as removeItemFromShoppingListInSupabase,
+  updateShoppingListItemQuantity as updateShoppingListItemQuantityInSupabase,
   getBudgets,
   getItems,
   getShoppingListWithItems,
@@ -34,7 +35,9 @@ interface DataContextType {
   deleteShoppingList: (id: string) => Promise<void>;
   addItemToShoppingList: (listId: string, itemId: string, quantity?: number) => Promise<void>;
   removeItemFromShoppingList: (listId: string, itemId: string) => Promise<void>;
+  updateItemQuantity: (listId: string, itemId: string, quantity: number) => Promise<void>;
   toggleItemChecked: (listId: string, itemId: string, checked: boolean) => Promise<void>;
+  refreshShoppingList: (listId: string) => Promise<void>;
   getShoppingListTotal: (listId: string) => number;
   getShoppingListItemCount: (listId: string) => number;
   refreshItems: () => Promise<void>;
@@ -195,10 +198,21 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const createShoppingList = async (listData: CreateShoppingListData): Promise<ShoppingList> => {
     try {
       const newList = await createShoppingListInSupabase(listData.name);
-      const newLists = [newList, ...shoppingLists];
+
+      // Add all selected items to the list
+      if (listData.itemIds && listData.itemIds.length > 0) {
+        await Promise.all(
+          listData.itemIds.map(itemId => addItemToShoppingListInSupabase(newList.id, itemId))
+        );
+      }
+
+      // Fetch the list with items populated
+      const listWithItems = await getShoppingListWithItems(newList.id);
+      const fullList = listWithItems ?? newList;
+      const newLists = [fullList, ...shoppingLists];
       setShoppingLists(newLists);
       await saveShoppingLists(newLists);
-      return newList;
+      return fullList;
     } catch (error) {
       console.error('Error creating shopping list:', error);
 
@@ -277,6 +291,40 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error('Error removing item from shopping list:', error);
       throw error;
+    }
+  };
+
+  const updateItemQuantity = async (listId: string, itemId: string, quantity: number): Promise<void> => {
+    // Optimistic update
+    const newLists = shoppingLists.map(list => {
+      if (list.id !== listId || !list.items) return list;
+      return {
+        ...list,
+        items: list.items.map(item =>
+          item.item_id === itemId ? { ...item, quantity } : item
+        ),
+      };
+    });
+    setShoppingLists(newLists);
+
+    try {
+      await updateShoppingListItemQuantityInSupabase(listId, itemId, quantity);
+    } catch (error) {
+      console.error('Error updating item quantity:', error);
+      setShoppingLists(shoppingLists);
+    }
+  };
+
+  const refreshShoppingList = async (listId: string): Promise<void> => {
+    try {
+      const updatedList = await getShoppingListWithItems(listId);
+      if (updatedList) {
+        setShoppingLists(prev =>
+          prev.map(list => list.id === listId ? updatedList : list)
+        );
+      }
+    } catch (error) {
+      console.error('Error refreshing shopping list:', error);
     }
   };
 
@@ -362,7 +410,9 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     deleteShoppingList,
     addItemToShoppingList,
     removeItemFromShoppingList,
+    updateItemQuantity,
     toggleItemChecked,
+    refreshShoppingList,
     getShoppingListTotal,
     getShoppingListItemCount,
     refreshItems,

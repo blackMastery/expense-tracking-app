@@ -1,14 +1,18 @@
+import AddItemModal from '@/components/AddItemModal';
+import AddItemsToListModal from '@/components/AddItemsToListModal';
 import ShareListModal from '@/components/ShareListModal';
+import { formatCurrency } from '@/lib/currency';
 import { Colors } from '@/constants/Colors';
 import { useData } from '@/contexts/DataContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { ShoppingListItemWithItem } from '@/types';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   FlatList,
   Image,
+  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -19,13 +23,22 @@ import * as Sharing from 'expo-sharing';
 
 export default function ShoppingListDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { shoppingLists, sharedLists, deleteShoppingList, removeItemFromShoppingList, toggleItemChecked } = useData();
+  const { shoppingLists, sharedLists, deleteShoppingList, addItemToShoppingList, removeItemFromShoppingList, updateItemQuantity, toggleItemChecked, refreshShoppingList } = useData();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
 
   const [shoppingMode, setShoppingMode] = useState(false);
+  const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [isShareModalVisible, setIsShareModalVisible] = useState(false);
+  const [isAddItemsModalVisible, setIsAddItemsModalVisible] = useState(false);
+  const [isNewItemModalVisible, setIsNewItemModalVisible] = useState(false);
+
+  useEffect(() => {
+    if (id) {
+      refreshShoppingList(id);
+    }
+  }, [id]);
 
   const shoppingList = [...shoppingLists, ...sharedLists].find(list => list.id === id);
 
@@ -154,7 +167,7 @@ export default function ShoppingListDetailScreen() {
                 {item.item.name}
               </Text>
               <Text style={[styles.itemPrice, { color: colors.tint }]}>
-                ${item.item.price.toFixed(2)}
+                {formatCurrency(item.item.price)}
               </Text>
               {item.item.description && (
                 <Text style={[styles.itemCategory, { color: colors.tabIconDefault }]}>
@@ -165,9 +178,36 @@ export default function ShoppingListDetailScreen() {
           </View>
 
           <View style={styles.itemActions}>
-            <View style={[styles.quantityBadge, { backgroundColor: colors.tint }]}>
-              <Text style={styles.quantityText}>Qty: {item.quantity || 1}</Text>
-            </View>
+            {!shoppingMode && (
+              <View style={[styles.quantityStepper, { borderColor: colors.border }]}>
+                <TouchableOpacity
+                  style={[styles.stepperButton, { backgroundColor: colors.border }]}
+                  onPress={() => {
+                    const newQty = (item.quantity || 1) - 1;
+                    if (newQty < 1) {
+                      handleRemoveItem(item.item_id, item.item.name);
+                    } else {
+                      updateItemQuantity(shoppingList.id, item.item_id, newQty);
+                    }
+                  }}
+                >
+                  <Text style={[styles.stepperButtonText, { color: colors.text }]}>−</Text>
+                </TouchableOpacity>
+                <Text style={[styles.stepperCount, { color: colors.text }]}>{item.quantity || 1}</Text>
+                <TouchableOpacity
+                  style={[styles.stepperButton, { backgroundColor: colors.tint }]}
+                  onPress={() => updateItemQuantity(shoppingList.id, item.item_id, (item.quantity || 1) + 1)}
+                >
+                  <Text style={styles.stepperButtonTextLight}>+</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {shoppingMode && (
+              <View style={[styles.quantityBadge, { backgroundColor: colors.tint }]}>
+                <Text style={styles.quantityText}>Qty: {item.quantity || 1}</Text>
+              </View>
+            )}
 
             {!shoppingMode && (
               <TouchableOpacity
@@ -182,7 +222,7 @@ export default function ShoppingListDetailScreen() {
 
         <View style={[styles.itemTotal, { borderTopColor: colors.border }]}>
           <Text style={[styles.itemTotalText, { color: colors.text }]}>
-            Total: ${(item.item.price * (item.quantity || 1)).toFixed(2)}
+            {`Total: ${formatCurrency(item.item.price * (item.quantity || 1))}`}
           </Text>
         </View>
       </TouchableOpacity>
@@ -201,21 +241,9 @@ export default function ShoppingListDetailScreen() {
           {shoppingList.name}
         </Text>
 
-        <View style={styles.headerActions}>
-          {!shoppingList.is_shared && (
-            <TouchableOpacity onPress={() => setIsShareModalVisible(true)} style={styles.headerButton}>
-              <Text style={[styles.headerButtonText, { color: colors.tint }]}>Share</Text>
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity onPress={handleExportCSV} style={styles.headerButton}>
-            <Text style={[styles.headerButtonText, { color: colors.tint }]}>Export</Text>
-          </TouchableOpacity>
-          {!shoppingList.is_shared && (
-            <TouchableOpacity onPress={handleDeleteList} style={styles.headerButton}>
-              <Text style={[styles.headerButtonText, { color: '#ff4444' }]}>Delete</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        <TouchableOpacity onPress={() => setIsMenuVisible(true)} style={styles.menuButton}>
+          <Text style={[styles.menuButtonText, { color: colors.text }]}>⋯</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Summary + Shopping Mode Toggle */}
@@ -226,7 +254,7 @@ export default function ShoppingListDetailScreen() {
         </View>
         <View style={styles.summaryRow}>
           <Text style={[styles.summaryLabel, { color: colors.text }]}>Total Cost:</Text>
-          <Text style={[styles.summaryValue, { color: colors.tint }]}>${totalCost.toFixed(2)}</Text>
+          <Text style={[styles.summaryValue, { color: colors.tint }]}>{formatCurrency(totalCost)}</Text>
         </View>
 
         {itemCount > 0 && (
@@ -264,10 +292,78 @@ export default function ShoppingListDetailScreen() {
         />
       )}
 
+      {/* Dropdown Menu */}
+      <Modal
+        visible={isMenuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsMenuVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.menuOverlay}
+          activeOpacity={1}
+          onPress={() => setIsMenuVisible(false)}
+        >
+          <View style={[styles.menuDropdown, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => { setIsMenuVisible(false); setIsAddItemsModalVisible(true); }}
+            >
+              <Text style={[styles.menuItemText, { color: colors.text }]}>+ Add Items</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => { setIsMenuVisible(false); setIsNewItemModalVisible(true); }}
+            >
+              <Text style={[styles.menuItemText, { color: colors.text }]}>+ New Item</Text>
+            </TouchableOpacity>
+
+            {!shoppingList.is_shared && (
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => { setIsMenuVisible(false); setIsShareModalVisible(true); }}
+              >
+                <Text style={[styles.menuItemText, { color: colors.text }]}>Share</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={styles.menuItem}
+              onPress={() => { setIsMenuVisible(false); handleExportCSV(); }}
+            >
+              <Text style={[styles.menuItemText, { color: colors.text }]}>Export CSV</Text>
+            </TouchableOpacity>
+
+            {!shoppingList.is_shared && (
+              <TouchableOpacity
+                style={[styles.menuItem, styles.menuItemLast]}
+                onPress={() => { setIsMenuVisible(false); handleDeleteList(); }}
+              >
+                <Text style={[styles.menuItemText, { color: '#ff4444' }]}>Delete List</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       <ShareListModal
         visible={isShareModalVisible}
         listId={shoppingList.id}
         onClose={() => setIsShareModalVisible(false)}
+      />
+
+      <AddItemsToListModal
+        visible={isAddItemsModalVisible}
+        listId={shoppingList.id}
+        existingItemIds={shoppingList.items ? shoppingList.items.map(i => i.item_id) : []}
+        onClose={() => setIsAddItemsModalVisible(false)}
+      />
+
+      <AddItemModal
+        visible={isNewItemModalVisible}
+        onClose={() => setIsNewItemModalVisible(false)}
+        onItemCreated={(item) => addItemToShoppingList(shoppingList.id, item.id)}
       />
     </View>
   );
@@ -384,6 +480,23 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   removeButtonText: { color: 'white', fontSize: 12, fontWeight: '600' },
+  quantityStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  stepperButton: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  stepperButtonText: { fontSize: 18, fontWeight: '600' },
+  stepperButtonTextLight: { fontSize: 18, fontWeight: '600', color: 'white' },
+  stepperCount: { width: 30, textAlign: 'center', fontSize: 15, fontWeight: '600' },
   itemTotal: {
     marginTop: 10,
     paddingTop: 10,
@@ -399,4 +512,33 @@ const styles = StyleSheet.create({
   },
   emptyStateText: { fontSize: 16, textAlign: 'center', opacity: 0.7 },
   errorText: { fontSize: 16, textAlign: 'center', marginTop: 100 },
+  menuButton: { padding: 8, minWidth: 40, alignItems: 'flex-end' },
+  menuButtonText: { fontSize: 22, fontWeight: '600', lineHeight: 24 },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-end',
+  },
+  menuDropdown: {
+    marginTop: 90,
+    marginRight: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    minWidth: 160,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+    overflow: 'hidden',
+  },
+  menuItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e0e0e0',
+  },
+  menuItemLast: { borderBottomWidth: 0 },
+  menuItemText: { fontSize: 15, fontWeight: '500' },
 });

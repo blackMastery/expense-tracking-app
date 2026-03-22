@@ -365,6 +365,19 @@ export const addItemToShoppingList = async (listId: string, itemId: string, quan
   }
 };
 
+export const updateShoppingListItemQuantity = async (listId: string, itemId: string, quantity: number): Promise<void> => {
+  const { error } = await supabase
+    .from('shopping_list_items')
+    .update({ quantity, updated_at: new Date().toISOString() })
+    .eq('list_id', listId)
+    .eq('item_id', itemId);
+
+  if (error) {
+    console.error('Error updating item quantity:', error);
+    throw error;
+  }
+};
+
 export const removeItemFromShoppingList = async (listId: string, itemId: string): Promise<void> => {
   const user = await getCurrentUser();
   if (!user) {

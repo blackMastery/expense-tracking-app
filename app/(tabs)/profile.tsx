@@ -1,3 +1,4 @@
+import { formatCurrency } from '@/lib/currency';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
@@ -103,17 +104,17 @@ export default function ProfileScreen() {
           </View>
 
           <View style={[styles.statCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
-            <Text style={[styles.statNumber, { color: colors.tint }]}>${totalItemsValue.toFixed(2)}</Text>
+            <Text style={[styles.statNumber, { color: colors.tint }]}>{formatCurrency(totalItemsValue)}</Text>
             <Text style={[styles.statLabel, { color: colors.text }]}>Total Items Value</Text>
           </View>
 
           <View style={[styles.statCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
-            <Text style={[styles.statNumber, { color: colors.tint }]}>${totalListsValue.toFixed(2)}</Text>
+            <Text style={[styles.statNumber, { color: colors.tint }]}>{formatCurrency(totalListsValue)}</Text>
             <Text style={[styles.statLabel, { color: colors.text }]}>Total Lists Value</Text>
           </View>
 
           <View style={[styles.statCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
-            <Text style={[styles.statNumber, { color: '#FF9800' }]}>${monthlyRecurringCost.toFixed(2)}</Text>
+            <Text style={[styles.statNumber, { color: '#FF9800' }]}>{formatCurrency(monthlyRecurringCost)}</Text>
             <Text style={[styles.statLabel, { color: colors.text }]}>Monthly Recurring</Text>
           </View>
 
