@@ -1,3 +1,4 @@
+import { formatCurrency } from '@/lib/currency';
 import { Colors } from '@/constants/Colors';
 import { useData } from '@/contexts/DataContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -100,7 +101,7 @@ export default function CreateShoppingListModal({ visible, onClose }: CreateShop
               {item.name}
             </Text>
             <Text style={[styles.itemPrice, { color: Colors[colorScheme ?? 'light'].tint }]}>
-              ${item.price.toFixed(2)}
+              {formatCurrency(item.price)}
             </Text>
             {item.description && (
               <Text style={[styles.itemCategory, { color: Colors[colorScheme ?? 'light'].tabIconDefault }]}>

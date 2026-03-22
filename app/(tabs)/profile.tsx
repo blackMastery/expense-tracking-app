@@ -1,20 +1,27 @@
+import { formatCurrency } from '@/lib/currency';
 import { Colors } from '@/constants/Colors';
 import { useAuth } from '@/contexts/AuthContext';
 import { useData } from '@/contexts/DataContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
+import { useRouter } from 'expo-router';
 import React from 'react';
 import {
-    Alert,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const { items, shoppingLists } = useData();
   const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
+  const router = useRouter();
 
   const handleSignOut = () => {
     Alert.alert(
@@ -22,13 +29,24 @@ export default function ProfileScreen() {
       'Are you sure you want to sign out?',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: signOut,
-        },
+        { text: 'Sign Out', style: 'destructive', onPress: signOut },
       ]
     );
+  };
+
+  const handleExportItems = async () => {
+    if (items.length === 0) {
+      Alert.alert('No Items', 'Your library is empty');
+      return;
+    }
+    const header = 'Name,Price,Category,Recurring,Recurrence Period\n';
+    const rows = items.map(item =>
+      `"${item.name}",${item.price.toFixed(2)},"${item.description || ''}",${item.is_recurring ? 'Yes' : 'No'},"${item.recurrence_period || ''}"`
+    ).join('\n');
+    const csv = header + rows;
+    const fileUri = `${FileSystem.cacheDirectory}item_library.csv`;
+    await FileSystem.writeAsStringAsync(fileUri, csv, { encoding: FileSystem.EncodingType.UTF8 });
+    await Sharing.shareAsync(fileUri, { mimeType: 'text/csv' });
   };
 
   const totalItemsValue = items.reduce((total, item) => total + item.price, 0);
@@ -37,89 +55,112 @@ export default function ProfileScreen() {
     return total + list.items.reduce((listTotal, listItem) => listTotal + (listItem.item.price * (listItem.quantity || 1)), 0);
   }, 0);
 
+  const monthlyRecurringCost = items
+    .filter(item => item.is_recurring)
+    .reduce((total, item) => {
+      if (item.recurrence_period === 'weekly') return total + item.price * 4.33;
+      if (item.recurrence_period === 'yearly') return total + item.price / 12;
+      return total + item.price; // monthly
+    }, 0);
+
   return (
-    <View style={[styles.container, { backgroundColor: Colors[colorScheme ?? 'light'].background }]}>
+    <ScrollView
+      style={[styles.container, { backgroundColor: colors.background }]}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Header */}
-      <View style={[styles.header, { borderBottomColor: Colors[colorScheme ?? 'light'].border }]}>
-        <Text style={[styles.title, { color: Colors[colorScheme ?? 'light'].text }]}>
-          Profile
-        </Text>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
+        <Text style={[styles.title, { color: colors.text }]}>Profile</Text>
       </View>
 
       {/* User Info */}
-      <View style={[styles.userSection, { borderBottomColor: Colors[colorScheme ?? 'light'].border }]}>
-        <View style={[styles.avatar, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}>
+      <View style={[styles.userSection, { borderBottomColor: colors.border }]}>
+        <View style={[styles.avatar, { backgroundColor: colors.tint }]}>
           <Text style={styles.avatarText}>
             {user?.name?.charAt(0).toUpperCase() || 'U'}
           </Text>
         </View>
-        <Text style={[styles.userName, { color: Colors[colorScheme ?? 'light'].text }]}>
+        <Text style={[styles.userName, { color: colors.text }]}>
           {user?.name || 'User'}
         </Text>
-        <Text style={[styles.userEmail, { color: Colors[colorScheme ?? 'light'].tabIconDefault }]}>
+        <Text style={[styles.userEmail, { color: colors.tabIconDefault }]}>
           {user?.email || 'user@example.com'}
         </Text>
       </View>
 
       {/* Stats */}
       <View style={styles.statsSection}>
-        <Text style={[styles.statsTitle, { color: Colors[colorScheme ?? 'light'].text }]}>
-          Your Stats
-        </Text>
-        
+        <Text style={[styles.statsTitle, { color: colors.text }]}>Your Stats</Text>
+
         <View style={styles.statsGrid}>
-          <View style={[styles.statCard, { 
-            backgroundColor: Colors[colorScheme ?? 'light'].background,
-            borderColor: Colors[colorScheme ?? 'light'].border
-          }]}>
-            <Text style={[styles.statNumber, { color: Colors[colorScheme ?? 'light'].tint }]}>
-              {items.length}
-            </Text>
-            <Text style={[styles.statLabel, { color: Colors[colorScheme ?? 'light'].text }]}>
-              Items in Library
-            </Text>
+          <View style={[styles.statCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <Text style={[styles.statNumber, { color: colors.tint }]}>{items.length}</Text>
+            <Text style={[styles.statLabel, { color: colors.text }]}>Items in Library</Text>
           </View>
 
-          <View style={[styles.statCard, { 
-            backgroundColor: Colors[colorScheme ?? 'light'].background,
-            borderColor: Colors[colorScheme ?? 'light'].border
-          }]}>
-            <Text style={[styles.statNumber, { color: Colors[colorScheme ?? 'light'].tint }]}>
-              {shoppingLists.length}
-            </Text>
-            <Text style={[styles.statLabel, { color: Colors[colorScheme ?? 'light'].text }]}>
-              Shopping Lists
-            </Text>
+          <View style={[styles.statCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <Text style={[styles.statNumber, { color: colors.tint }]}>{shoppingLists.length}</Text>
+            <Text style={[styles.statLabel, { color: colors.text }]}>Shopping Lists</Text>
           </View>
 
-          <View style={[styles.statCard, { 
-            backgroundColor: Colors[colorScheme ?? 'light'].background,
-            borderColor: Colors[colorScheme ?? 'light'].border
-          }]}>
-            <Text style={[styles.statNumber, { color: Colors[colorScheme ?? 'light'].tint }]}>
-              ${totalItemsValue.toFixed(2)}
-            </Text>
-            <Text style={[styles.statLabel, { color: Colors[colorScheme ?? 'light'].text }]}>
-              Total Items Value
-            </Text>
+          <View style={[styles.statCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <Text style={[styles.statNumber, { color: colors.tint }]}>{formatCurrency(totalItemsValue)}</Text>
+            <Text style={[styles.statLabel, { color: colors.text }]}>Total Items Value</Text>
           </View>
 
-          <View style={[styles.statCard, { 
-            backgroundColor: Colors[colorScheme ?? 'light'].background,
-            borderColor: Colors[colorScheme ?? 'light'].border
-          }]}>
-            <Text style={[styles.statNumber, { color: Colors[colorScheme ?? 'light'].tint }]}>
-              ${totalListsValue.toFixed(2)}
+          <View style={[styles.statCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <Text style={[styles.statNumber, { color: colors.tint }]}>{formatCurrency(totalListsValue)}</Text>
+            <Text style={[styles.statLabel, { color: colors.text }]}>Total Lists Value</Text>
+          </View>
+
+          <View style={[styles.statCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <Text style={[styles.statNumber, { color: '#FF9800' }]}>{formatCurrency(monthlyRecurringCost)}</Text>
+            <Text style={[styles.statLabel, { color: colors.text }]}>Monthly Recurring</Text>
+          </View>
+
+          <View style={[styles.statCard, { backgroundColor: colors.background, borderColor: colors.border }]}>
+            <Text style={[styles.statNumber, { color: colors.tint }]}>
+              {items.filter(i => i.is_recurring).length}
             </Text>
-            <Text style={[styles.statLabel, { color: Colors[colorScheme ?? 'light'].text }]}>
-              Total Lists Value
-            </Text>
+            <Text style={[styles.statLabel, { color: colors.text }]}>Recurring Items</Text>
           </View>
         </View>
       </View>
 
-      {/* Actions */}
-      <View style={styles.actionsSection}>
+      {/* Quick Actions */}
+      <View style={[styles.actionsSection, { borderTopColor: colors.border }]}>
+        <Text style={[styles.actionsTitle, { color: colors.text }]}>Tools</Text>
+
+        <TouchableOpacity
+          style={[styles.actionRow, { borderBottomColor: colors.border }]}
+          onPress={() => router.push('/budget')}
+        >
+          <Text style={[styles.actionIcon]}>💰</Text>
+          <Text style={[styles.actionLabel, { color: colors.text }]}>Budget Manager</Text>
+          <Text style={[styles.actionChevron, { color: colors.tabIconDefault }]}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionRow, { borderBottomColor: colors.border }]}
+          onPress={() => router.push('/analytics')}
+        >
+          <Text style={styles.actionIcon}>📊</Text>
+          <Text style={[styles.actionLabel, { color: colors.text }]}>Analytics</Text>
+          <Text style={[styles.actionChevron, { color: colors.tabIconDefault }]}>›</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionRow, { borderBottomColor: colors.border }]}
+          onPress={handleExportItems}
+        >
+          <Text style={styles.actionIcon}>📤</Text>
+          <Text style={[styles.actionLabel, { color: colors.text }]}>Export Item Library</Text>
+          <Text style={[styles.actionChevron, { color: colors.tabIconDefault }]}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Sign Out */}
+      <View style={styles.signOutSection}>
         <TouchableOpacity
           style={[styles.signOutButton, { backgroundColor: '#ff4444' }]}
           onPress={handleSignOut}
@@ -127,23 +168,18 @@ export default function ProfileScreen() {
           <Text style={styles.signOutButtonText}>Sign Out</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     padding: 20,
     borderBottomWidth: 1,
     paddingTop: 60,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-  },
+  title: { fontSize: 28, fontWeight: 'bold' },
   userSection: {
     alignItems: 'center',
     padding: 30,
@@ -157,28 +193,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 15,
   },
-  avatarText: {
-    color: 'white',
-    fontSize: 32,
-    fontWeight: 'bold',
-  },
-  userName: {
-    fontSize: 24,
-    fontWeight: '600',
-    marginBottom: 5,
-  },
-  userEmail: {
-    fontSize: 16,
-    opacity: 0.7,
-  },
-  statsSection: {
-    padding: 20,
-  },
-  statsTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginBottom: 20,
-  },
+  avatarText: { color: 'white', fontSize: 32, fontWeight: 'bold' },
+  userName: { fontSize: 24, fontWeight: '600', marginBottom: 5 },
+  userEmail: { fontSize: 16, opacity: 0.7 },
+  statsSection: { padding: 20 },
+  statsTitle: { fontSize: 20, fontWeight: '600', marginBottom: 20 },
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -192,29 +211,29 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     alignItems: 'center',
   },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  statLabel: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+  statNumber: { fontSize: 22, fontWeight: 'bold', marginBottom: 8 },
+  statLabel: { fontSize: 13, textAlign: 'center', lineHeight: 18 },
   actionsSection: {
-    padding: 20,
-    marginTop: 'auto',
+    borderTopWidth: 1,
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
+  actionsTitle: { fontSize: 20, fontWeight: '600', marginBottom: 12 },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  actionIcon: { fontSize: 20, marginRight: 14 },
+  actionLabel: { flex: 1, fontSize: 16 },
+  actionChevron: { fontSize: 22 },
+  signOutSection: { padding: 20, paddingTop: 30, paddingBottom: 50 },
   signOutButton: {
     height: 50,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  signOutButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  signOutButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
 });
