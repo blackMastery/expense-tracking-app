@@ -47,6 +47,10 @@ export default function SignInScreen() {
     router.push('/auth/signup');
   };
 
+  const goToForgotPassword = () => {
+    router.push('/auth/forgot-password');
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -95,6 +99,12 @@ export default function SignInScreen() {
           >
             <Text style={styles.buttonText}>
               {isLoading ? 'Signing In...' : 'Sign In'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity onPress={goToForgotPassword} style={styles.linkButton}>
+            <Text style={[styles.linkText, { color: Colors[colorScheme ?? 'light'].tint }]}>
+              Forgot password?
             </Text>
           </TouchableOpacity>
 

@@ -1,20 +1,31 @@
-import { createItem, deleteItem as deleteItemInSupabase, getItems, updateItem as updateItemInSupabase } from '@/lib/supabase-utils';
-import { 
+import {
+  createBudget as createBudgetInSupabase,
+  createItem,
   createShoppingList as createShoppingListInSupabase,
-  getShoppingLists as getShoppingListsFromSupabase,
-  updateShoppingList as updateShoppingListInSupabase,
+  deleteBudget as deleteBudgetInSupabase,
+  deleteItem as deleteItemInSupabase,
   deleteShoppingList as deleteShoppingListInSupabase,
   addItemToShoppingList as addItemToShoppingListInSupabase,
   removeItemFromShoppingList as removeItemFromShoppingListInSupabase,
-  getShoppingListWithItems
+  getBudgets,
+  getItems,
+  getShoppingListWithItems,
+  getShoppingLists as getShoppingListsFromSupabase,
+  getSharedWithMeLists,
+  toggleShoppingListItemChecked as toggleCheckedInSupabase,
+  updateBudget as updateBudgetInSupabase,
+  updateItem as updateItemInSupabase,
+  updateShoppingList as updateShoppingListInSupabase,
 } from '@/lib/supabase-utils';
-import { CreateItemData, CreateShoppingListData, Item, ShoppingList } from '@/types';
+import { Budget, CreateBudgetData, CreateItemData, CreateShoppingListData, Item, ShoppingList } from '@/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 interface DataContextType {
   items: Item[];
   shoppingLists: ShoppingList[];
+  sharedLists: ShoppingList[];
+  budgets: Budget[];
   addItem: (itemData: CreateItemData) => Promise<Item>;
   updateItem: (id: string, updates: Partial<Item>) => Promise<void>;
   deleteItem: (id: string) => Promise<void>;
@@ -23,9 +34,13 @@ interface DataContextType {
   deleteShoppingList: (id: string) => Promise<void>;
   addItemToShoppingList: (listId: string, itemId: string, quantity?: number) => Promise<void>;
   removeItemFromShoppingList: (listId: string, itemId: string) => Promise<void>;
+  toggleItemChecked: (listId: string, itemId: string, checked: boolean) => Promise<void>;
   getShoppingListTotal: (listId: string) => number;
   getShoppingListItemCount: (listId: string) => number;
   refreshItems: () => Promise<void>;
+  createBudget: (budgetData: CreateBudgetData) => Promise<Budget>;
+  updateBudget: (id: string, updates: Partial<Budget>) => Promise<void>;
+  deleteBudget: (id: string) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -41,6 +56,8 @@ export const useData = () => {
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<Item[]>([]);
   const [shoppingLists, setShoppingLists] = useState<ShoppingList[]>([]);
+  const [sharedLists, setSharedLists] = useState<ShoppingList[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -50,47 +67,52 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadData = async () => {
     try {
       setIsLoading(true);
-      
-      // Try to load from Supabase first
+
       try {
-        const [supabaseItems, supabaseLists] = await Promise.all([
+        const [supabaseItems, supabaseLists, supabaseSharedLists, supabaseBudgets] = await Promise.all([
           getItems(),
-          getShoppingListsFromSupabase()
+          getShoppingListsFromSupabase(),
+          getSharedWithMeLists(),
+          getBudgets(),
         ]);
-        
+
         setItems(supabaseItems);
         setShoppingLists(supabaseLists);
-        
-        // Cache in AsyncStorage
+        setSharedLists(supabaseSharedLists);
+        setBudgets(supabaseBudgets);
+
         await Promise.all([
           AsyncStorage.setItem('items', JSON.stringify(supabaseItems)),
-          AsyncStorage.setItem('shoppingLists', JSON.stringify(supabaseLists))
+          AsyncStorage.setItem('shoppingLists', JSON.stringify(supabaseLists)),
+          AsyncStorage.setItem('budgets', JSON.stringify(supabaseBudgets)),
         ]);
       } catch (error) {
         console.log('Failed to load from Supabase, using cached data:', error);
-        
-        // Fallback to AsyncStorage if Supabase fails
-        const [cachedItems, cachedLists] = await Promise.all([
+
+        const [cachedItems, cachedLists, cachedBudgets] = await Promise.all([
           AsyncStorage.getItem('items'),
-          AsyncStorage.getItem('shoppingLists')
+          AsyncStorage.getItem('shoppingLists'),
+          AsyncStorage.getItem('budgets'),
         ]);
-        
+
         if (cachedItems) {
-          const parsedItems = JSON.parse(cachedItems).map((item: any) => ({
+          setItems(JSON.parse(cachedItems).map((item: any) => ({
             ...item,
             created_at: new Date(item.created_at).toISOString(),
             updated_at: new Date(item.updated_at).toISOString(),
-          }));
-          setItems(parsedItems);
+          })));
         }
-        
+
         if (cachedLists) {
-          const parsedLists = JSON.parse(cachedLists).map((list: any) => ({
+          setShoppingLists(JSON.parse(cachedLists).map((list: any) => ({
             ...list,
             created_at: new Date(list.created_at).toISOString(),
             updated_at: new Date(list.updated_at).toISOString(),
-          }));
-          setShoppingLists(parsedLists);
+          })));
+        }
+
+        if (cachedBudgets) {
+          setBudgets(JSON.parse(cachedBudgets));
         }
       }
     } catch (error) {
@@ -118,162 +140,114 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addItem = async (itemData: CreateItemData): Promise<Item> => {
     try {
-      // Save to Supabase first
       const newItem = await createItem(itemData);
-      
-      // Update local state
-      const newItems = [...items, newItem];
+      const newItems = [newItem, ...items];
       setItems(newItems);
-      
-      // Cache in AsyncStorage
       await saveItems(newItems);
-      
       return newItem;
     } catch (error) {
       console.error('Error adding item:', error);
-      
-      // If Supabase fails, save locally only
+
       const fallbackItem: Item = {
         id: Date.now().toString(),
-        user_id: 'local', // Placeholder for local items
+        user_id: 'local',
         ...itemData,
         image_url: itemData.imageUri,
         description: itemData.category,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      
-      const newItems = [...items, fallbackItem];
+
+      const newItems = [fallbackItem, ...items];
       setItems(newItems);
       await saveItems(newItems);
-      
+
       return fallbackItem;
     }
   };
 
   const updateItem = async (id: string, updates: Partial<Item>): Promise<void> => {
     try {
-      // Update in Supabase first
       await updateItemInSupabase(id, updates);
-      
-      // Update local state
-      const newItems = items.map(item =>
-        item.id === id ? { ...item, ...updates, updated_at: new Date().toISOString() } : item
-      );
-      setItems(newItems);
-      await saveItems(newItems);
     } catch (error) {
-      console.error('Error updating item:', error);
-      
-      // If Supabase fails, update locally only
-      const newItems = items.map(item =>
-        item.id === id ? { ...item, ...updates, updated_at: new Date().toISOString() } : item
-      );
-      setItems(newItems);
-      await saveItems(newItems);
+      console.error('Error updating item in Supabase:', error);
     }
+
+    const newItems = items.map(item =>
+      item.id === id ? { ...item, ...updates, updated_at: new Date().toISOString() } : item
+    );
+    setItems(newItems);
+    await saveItems(newItems);
   };
 
   const deleteItem = async (id: string): Promise<void> => {
     try {
-      // Delete from Supabase first
       await deleteItemInSupabase(id);
-      
-      // Update local state
-      const newItems = items.filter(item => item.id !== id);
-      setItems(newItems);
-      await saveItems(newItems);
     } catch (error) {
       console.error('Error deleting item:', error);
-      
-      // If Supabase fails, delete locally only
-      const newItems = items.filter(item => item.id !== id);
-      setItems(newItems);
-      await saveItems(newItems);
     }
+
+    const newItems = items.filter(item => item.id !== id);
+    setItems(newItems);
+    await saveItems(newItems);
   };
 
   const createShoppingList = async (listData: CreateShoppingListData): Promise<ShoppingList> => {
     try {
-      // Save to Supabase first
       const newList = await createShoppingListInSupabase(listData.name);
-      
-      // Update local state
-      const newLists = [...shoppingLists, newList];
+      const newLists = [newList, ...shoppingLists];
       setShoppingLists(newLists);
-      
-      // Cache in AsyncStorage
       await saveShoppingLists(newLists);
-      
       return newList;
     } catch (error) {
       console.error('Error creating shopping list:', error);
-      
-      // If Supabase fails, save locally only
+
       const fallbackList: ShoppingList = {
         id: Date.now().toString(),
         name: listData.name,
-        user_id: 'local', // Placeholder for local items
+        user_id: 'local',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      
-      const newLists = [...shoppingLists, fallbackList];
+
+      const newLists = [fallbackList, ...shoppingLists];
       setShoppingLists(newLists);
       await saveShoppingLists(newLists);
-      
+
       return fallbackList;
     }
   };
 
   const updateShoppingList = async (id: string, updates: Partial<ShoppingList>): Promise<void> => {
     try {
-      // Update in Supabase first
       await updateShoppingListInSupabase(id, updates);
-      
-      // Update local state
-      const newLists = shoppingLists.map(list =>
-        list.id === id ? { ...list, ...updates, updated_at: new Date().toISOString() } : list
-      );
-      setShoppingLists(newLists);
-      await saveShoppingLists(newLists);
     } catch (error) {
       console.error('Error updating shopping list:', error);
-      
-      // If Supabase fails, update locally only
-      const newLists = shoppingLists.map(list =>
-        list.id === id ? { ...list, ...updates, updated_at: new Date().toISOString() } : list
-      );
-      setShoppingLists(newLists);
-      await saveShoppingLists(newLists);
     }
+
+    const newLists = shoppingLists.map(list =>
+      list.id === id ? { ...list, ...updates, updated_at: new Date().toISOString() } : list
+    );
+    setShoppingLists(newLists);
+    await saveShoppingLists(newLists);
   };
 
   const deleteShoppingList = async (id: string): Promise<void> => {
     try {
-      // Delete from Supabase first
       await deleteShoppingListInSupabase(id);
-      
-      // Update local state
-      const newLists = shoppingLists.filter(list => list.id !== id);
-      setShoppingLists(newLists);
-      await saveShoppingLists(newLists);
     } catch (error) {
       console.error('Error deleting shopping list:', error);
-      
-      // If Supabase fails, delete locally only
-      const newLists = shoppingLists.filter(list => list.id !== id);
-      setShoppingLists(newLists);
-      await saveShoppingLists(newLists);
     }
+
+    const newLists = shoppingLists.filter(list => list.id !== id);
+    setShoppingLists(newLists);
+    await saveShoppingLists(newLists);
   };
 
   const addItemToShoppingList = async (listId: string, itemId: string, quantity: number = 1): Promise<void> => {
     try {
-      // Add to Supabase first
       await addItemToShoppingListInSupabase(listId, itemId, quantity);
-      
-      // Refresh the shopping list data
+
       const updatedList = await getShoppingListWithItems(listId);
       if (updatedList) {
         const newLists = shoppingLists.map(list =>
@@ -290,10 +264,8 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const removeItemFromShoppingList = async (listId: string, itemId: string): Promise<void> => {
     try {
-      // Remove from Supabase first
       await removeItemFromShoppingListInSupabase(listId, itemId);
-      
-      // Refresh the shopping list data
+
       const updatedList = await getShoppingListWithItems(listId);
       if (updatedList) {
         const newLists = shoppingLists.map(list =>
@@ -308,14 +280,36 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const toggleItemChecked = async (listId: string, itemId: string, checked: boolean): Promise<void> => {
+    // Optimistic update
+    const newLists = shoppingLists.map(list => {
+      if (list.id !== listId || !list.items) return list;
+      return {
+        ...list,
+        items: list.items.map(item =>
+          item.item_id === itemId ? { ...item, checked } : item
+        ),
+      };
+    });
+    setShoppingLists(newLists);
+
+    try {
+      await toggleCheckedInSupabase(listId, itemId, checked);
+    } catch (error) {
+      console.error('Error toggling item checked:', error);
+      // Revert on failure
+      setShoppingLists(shoppingLists);
+    }
+  };
+
   const getShoppingListTotal = (listId: string): number => {
-    const list = shoppingLists.find(l => l.id === listId);
+    const list = [...shoppingLists, ...sharedLists].find(l => l.id === listId);
     if (!list || !list.items) return 0;
     return list.items.reduce((total, item) => total + (item.item.price * (item.quantity || 1)), 0);
   };
 
   const getShoppingListItemCount = (listId: string): number => {
-    const list = shoppingLists.find(l => l.id === listId);
+    const list = [...shoppingLists, ...sharedLists].find(l => l.id === listId);
     if (!list || !list.items) return 0;
     return list.items.length;
   };
@@ -330,9 +324,36 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Budget actions
+  const createBudget = async (budgetData: CreateBudgetData): Promise<Budget> => {
+    const newBudget = await createBudgetInSupabase(budgetData);
+    const newBudgets = [newBudget, ...budgets];
+    setBudgets(newBudgets);
+    await AsyncStorage.setItem('budgets', JSON.stringify(newBudgets));
+    return newBudget;
+  };
+
+  const updateBudget = async (id: string, updates: Partial<Budget>): Promise<void> => {
+    await updateBudgetInSupabase(id, updates);
+    const newBudgets = budgets.map(b =>
+      b.id === id ? { ...b, ...updates, updated_at: new Date().toISOString() } : b
+    );
+    setBudgets(newBudgets);
+    await AsyncStorage.setItem('budgets', JSON.stringify(newBudgets));
+  };
+
+  const deleteBudget = async (id: string): Promise<void> => {
+    await deleteBudgetInSupabase(id);
+    const newBudgets = budgets.filter(b => b.id !== id);
+    setBudgets(newBudgets);
+    await AsyncStorage.setItem('budgets', JSON.stringify(newBudgets));
+  };
+
   const value: DataContextType = {
     items,
     shoppingLists,
+    sharedLists,
+    budgets,
     addItem,
     updateItem,
     deleteItem,
@@ -341,9 +362,13 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     deleteShoppingList,
     addItemToShoppingList,
     removeItemFromShoppingList,
+    toggleItemChecked,
     getShoppingListTotal,
     getShoppingListItemCount,
     refreshItems,
+    createBudget,
+    updateBudget,
+    deleteBudget,
   };
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

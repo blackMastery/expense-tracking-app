@@ -1,3 +1,4 @@
+import BarcodeScannerModal from '@/components/BarcodeScannerModal';
 import { Colors } from '@/constants/Colors';
 import { useData } from '@/contexts/DataContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
@@ -9,7 +10,9 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
+  ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -21,15 +24,21 @@ interface AddItemModalProps {
   onClose: () => void;
 }
 
+const RECURRENCE_OPTIONS = ['weekly', 'monthly', 'yearly'] as const;
+
 export default function AddItemModal({ visible, onClose }: AddItemModalProps) {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [recurrencePeriod, setRecurrencePeriod] = useState<'weekly' | 'monthly' | 'yearly'>('monthly');
   const [isLoading, setIsLoading] = useState(false);
-  
+  const [isScannerVisible, setIsScannerVisible] = useState(false);
+
   const { addItem } = useData();
   const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
 
   const takePicture = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -71,6 +80,11 @@ export default function AddItemModal({ visible, onClose }: AddItemModalProps) {
     }
   };
 
+  const handleBarcodeScanned = (scannedName: string) => {
+    setName(scannedName);
+    setIsScannerVisible(false);
+  };
+
   const handleSubmit = async () => {
     if (!name.trim() || !price.trim()) {
       Alert.alert('Error', 'Please fill in name and price');
@@ -90,13 +104,16 @@ export default function AddItemModal({ visible, onClose }: AddItemModalProps) {
         price: priceValue,
         category: category.trim() || undefined,
         imageUri: imageUri || undefined,
+        is_recurring: isRecurring,
+        recurrence_period: isRecurring ? recurrencePeriod : undefined,
       });
 
-      // Reset form
       setName('');
       setPrice('');
       setCategory('');
       setImageUri(null);
+      setIsRecurring(false);
+      setRecurrencePeriod('monthly');
       onClose();
     } catch (error) {
       console.error('Error adding item:', error);
@@ -106,173 +123,196 @@ export default function AddItemModal({ visible, onClose }: AddItemModalProps) {
     }
   };
 
-  const resetForm = () => {
-    setName('');
-    setPrice('');
-    setCategory('');
-    setImageUri(null);
-  };
-
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-    >
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <>
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={onClose}
       >
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: Colors[colorScheme ?? 'light'].text }]}>
-            Add New Item
-          </Text>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Text style={[styles.closeText, { color: Colors[colorScheme ?? 'light'].tint }]}>
-              Cancel
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <KeyboardAvoidingView
+          style={[styles.container, { backgroundColor: colors.background }]}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.title, { color: colors.text }]}>Add New Item</Text>
+            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
+              <Text style={[styles.closeText, { color: colors.tint }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
 
-        <View style={styles.content}>
-          {/* Image Section */}
-          <View style={styles.imageSection}>
-            {imageUri ? (
-              <View style={styles.imageContainer}>
-                <Image source={{ uri: imageUri }} style={styles.image} />
+          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            {/* Image Section */}
+            <View style={styles.imageSection}>
+              {imageUri ? (
+                <View style={styles.imageContainer}>
+                  <Image source={{ uri: imageUri }} style={styles.image} />
+                  <TouchableOpacity
+                    style={styles.removeImageButton}
+                    onPress={() => setImageUri(null)}
+                  >
+                    <Text style={styles.removeImageText}>×</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={[styles.imagePlaceholder, { borderColor: colors.border }]}>
+                  <Text style={[styles.imagePlaceholderText, { color: colors.tabIconDefault }]}>
+                    No Image
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.imageButtons}>
                 <TouchableOpacity
-                  style={styles.removeImageButton}
-                  onPress={() => setImageUri(null)}
+                  style={[styles.imageButton, { backgroundColor: colors.tint }]}
+                  onPress={takePicture}
                 >
-                  <Text style={styles.removeImageText}>×</Text>
+                  <Text style={styles.imageButtonText}>Take Photo</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.imageButton, { backgroundColor: colors.border }]}
+                  onPress={pickImage}
+                >
+                  <Text style={[styles.imageButtonText, { color: colors.text }]}>Choose Photo</Text>
                 </TouchableOpacity>
               </View>
-            ) : (
-              <View style={styles.imagePlaceholder}>
-                <Text style={[styles.imagePlaceholderText, { color: Colors[colorScheme ?? 'light'].tabIconDefault }]}>
-                  No Image
-                </Text>
+            </View>
+
+            {/* Form Fields */}
+            <View style={styles.form}>
+              {/* Name + Scan Barcode */}
+              <View style={styles.nameRow}>
+                <TextInput
+                  style={[styles.input, styles.nameInput, {
+                    borderColor: colors.border,
+                    color: colors.text,
+                    backgroundColor: colors.background,
+                  }]}
+                  placeholder="Item Name"
+                  placeholderTextColor={colors.tabIconDefault}
+                  value={name}
+                  onChangeText={setName}
+                />
+                <TouchableOpacity
+                  style={[styles.scanButton, { backgroundColor: colors.tint }]}
+                  onPress={() => setIsScannerVisible(true)}
+                >
+                  <Text style={styles.scanButtonText}>📷 Scan</Text>
+                </TouchableOpacity>
               </View>
-            )}
-            
-            <View style={styles.imageButtons}>
+
+              <TextInput
+                style={[styles.input, {
+                  borderColor: colors.border,
+                  color: colors.text,
+                  backgroundColor: colors.background,
+                }]}
+                placeholder="Price"
+                placeholderTextColor={colors.tabIconDefault}
+                value={price}
+                onChangeText={setPrice}
+                keyboardType="numeric"
+              />
+
+              <TextInput
+                style={[styles.input, {
+                  borderColor: colors.border,
+                  color: colors.text,
+                  backgroundColor: colors.background,
+                }]}
+                placeholder="Category (optional)"
+                placeholderTextColor={colors.tabIconDefault}
+                value={category}
+                onChangeText={setCategory}
+              />
+
+              {/* Recurring Toggle */}
+              <View style={[styles.recurringRow, { borderColor: colors.border }]}>
+                <View>
+                  <Text style={[styles.recurringLabel, { color: colors.text }]}>Recurring Expense</Text>
+                  <Text style={[styles.recurringSubLabel, { color: colors.tabIconDefault }]}>
+                    Mark this as a regular expense
+                  </Text>
+                </View>
+                <Switch
+                  value={isRecurring}
+                  onValueChange={setIsRecurring}
+                  trackColor={{ false: colors.border, true: colors.tint }}
+                  thumbColor="white"
+                />
+              </View>
+
+              {isRecurring && (
+                <View style={styles.periodPicker}>
+                  {RECURRENCE_OPTIONS.map(option => (
+                    <TouchableOpacity
+                      key={option}
+                      style={[
+                        styles.periodOption,
+                        recurrencePeriod === option
+                          ? { backgroundColor: colors.tint }
+                          : { backgroundColor: colors.border },
+                      ]}
+                      onPress={() => setRecurrencePeriod(option)}
+                    >
+                      <Text style={[
+                        styles.periodOptionText,
+                        { color: recurrencePeriod === option ? 'white' : colors.text },
+                      ]}>
+                        {option.charAt(0).toUpperCase() + option.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {/* Action Buttons */}
+            <View style={styles.actions}>
               <TouchableOpacity
-                style={[styles.imageButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
-                onPress={takePicture}
+                style={[styles.submitButton, { backgroundColor: colors.tint }]}
+                onPress={handleSubmit}
+                disabled={isLoading}
               >
-                <Text style={styles.imageButtonText}>Take Photo</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.imageButton, { backgroundColor: Colors[colorScheme ?? 'light'].border }]}
-                onPress={pickImage}
-              >
-                <Text style={[styles.imageButtonText, { color: Colors[colorScheme ?? 'light'].text }]}>
-                  Choose Photo
+                <Text style={styles.submitButtonText}>
+                  {isLoading ? 'Adding...' : 'Add Item'}
                 </Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </Modal>
 
-          {/* Form Fields */}
-          <View style={styles.form}>
-            <TextInput
-              style={[styles.input, { 
-                borderColor: Colors[colorScheme ?? 'light'].border,
-                color: Colors[colorScheme ?? 'light'].text,
-                backgroundColor: Colors[colorScheme ?? 'light'].background
-              }]}
-              placeholder="Item Name"
-              placeholderTextColor={Colors[colorScheme ?? 'light'].tabIconDefault}
-              value={name}
-              onChangeText={setName}
-            />
-
-            <TextInput
-              style={[styles.input, { 
-                borderColor: Colors[colorScheme ?? 'light'].border,
-                color: Colors[colorScheme ?? 'light'].text,
-                backgroundColor: Colors[colorScheme ?? 'light'].background
-              }]}
-              placeholder="Price"
-              placeholderTextColor={Colors[colorScheme ?? 'light'].tabIconDefault}
-              value={price}
-              onChangeText={setPrice}
-              keyboardType="numeric"
-            />
-
-            <TextInput
-              style={[styles.input, { 
-                borderColor: Colors[colorScheme ?? 'light'].border,
-                color: Colors[colorScheme ?? 'light'].text,
-                backgroundColor: Colors[colorScheme ?? 'light'].background
-              }]}
-              placeholder="Category (optional)"
-              placeholderTextColor={Colors[colorScheme ?? 'light'].tabIconDefault}
-              value={category}
-              onChangeText={setCategory}
-            />
-          </View>
-
-          {/* Action Buttons */}
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={[styles.submitButton, { backgroundColor: Colors[colorScheme ?? 'light'].tint }]}
-              onPress={handleSubmit}
-              disabled={isLoading}
-            >
-              <Text style={styles.submitButtonText}>
-                {isLoading ? 'Adding...' : 'Add Item'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
+      <BarcodeScannerModal
+        visible={isScannerVisible}
+        onClose={() => setIsScannerVisible(false)}
+        onScanned={handleBarcodeScanned}
+      />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'white',
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
   },
-  title: {
-    fontSize: 20,
-    fontWeight: '600',
-  },
-  closeButton: {
-    padding: 5,
-  },
-  closeText: {
-    fontSize: 16,
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
+  title: { fontSize: 20, fontWeight: '600' },
+  closeButton: { padding: 5 },
+  closeText: { fontSize: 16 },
+  content: { flex: 1, padding: 20 },
   imageSection: {
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 24,
   },
-  imageContainer: {
-    position: 'relative',
-    marginBottom: 15,
-  },
-  image: {
-    width: 200,
-    height: 150,
-    borderRadius: 10,
-  },
+  imageContainer: { position: 'relative', marginBottom: 15 },
+  image: { width: 200, height: 150, borderRadius: 10 },
   removeImageButton: {
     position: 'absolute',
     top: -10,
@@ -284,42 +324,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  removeImageText: {
-    color: 'white',
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
+  removeImageText: { color: 'white', fontSize: 20, fontWeight: 'bold' },
   imagePlaceholder: {
     width: 200,
     height: 150,
     borderRadius: 10,
     borderWidth: 2,
-    borderColor: '#e0e0e0',
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 15,
   },
-  imagePlaceholderText: {
-    fontSize: 16,
-  },
-  imageButtons: {
-    flexDirection: 'row',
-    gap: 10,
-  },
+  imagePlaceholderText: { fontSize: 16 },
+  imageButtons: { flexDirection: 'row', gap: 10 },
   imageButton: {
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
   },
-  imageButtonText: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: '600',
+  imageButtonText: { color: 'white', fontSize: 14, fontWeight: '600' },
+  form: { marginBottom: 24 },
+  nameRow: { flexDirection: 'row', gap: 10, marginBottom: 15 },
+  nameInput: { flex: 1, marginBottom: 0 },
+  scanButton: {
+    height: 50,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  form: {
-    marginBottom: 30,
-  },
+  scanButtonText: { color: 'white', fontSize: 13, fontWeight: '600' },
   input: {
     height: 50,
     borderWidth: 1,
@@ -328,18 +362,35 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     fontSize: 16,
   },
-  actions: {
-    marginTop: 'auto',
+  recurringRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 15,
+    borderWidth: 1,
+    borderRadius: 8,
+    marginBottom: 15,
   },
+  recurringLabel: { fontSize: 16, fontWeight: '500' },
+  recurringSubLabel: { fontSize: 12, marginTop: 2 },
+  periodPicker: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 15,
+  },
+  periodOption: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  periodOptionText: { fontSize: 14, fontWeight: '600' },
+  actions: { paddingBottom: 40 },
   submitButton: {
     height: 50,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  submitButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  submitButtonText: { color: 'white', fontSize: 16, fontWeight: '600' },
 });

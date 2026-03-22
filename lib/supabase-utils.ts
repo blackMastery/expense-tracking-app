@@ -1,4 +1,4 @@
-import { CreateItemData, Item, Profile, ShoppingList, ShoppingListItemWithItem } from '../types';
+import { Budget, CreateBudgetData, CreateItemData, Item, PriceHistory, Profile, SharedList, ShoppingList, ShoppingListItemWithItem } from '../types';
 import { supabase } from './supabase';
 
 export const getCurrentUser = async () => {
@@ -53,6 +53,14 @@ export const isAuthenticated = async (): Promise<boolean> => {
   return !!session;
 };
 
+export const resetPassword = async (email: string): Promise<void> => {
+  const { error } = await supabase.auth.resetPasswordForEmail(email);
+  if (error) {
+    console.error('Error sending password reset:', error);
+    throw error;
+  }
+};
+
 // Item database functions
 export const createItem = async (itemData: CreateItemData): Promise<Item> => {
   const user = await getCurrentUser();
@@ -74,6 +82,8 @@ export const createItem = async (itemData: CreateItemData): Promise<Item> => {
       price: itemData.price,
       image_url: imageUrl,
       description: itemData.category || null,
+      is_recurring: itemData.is_recurring || false,
+      recurrence_period: itemData.recurrence_period || null,
     })
     .select()
     .single();
@@ -82,6 +92,9 @@ export const createItem = async (itemData: CreateItemData): Promise<Item> => {
     console.error('Error creating item:', error);
     throw error;
   }
+
+  // Record initial price in history
+  await recordPriceHistory(data.id, itemData.price);
 
   return data;
 };
@@ -110,6 +123,11 @@ export const updateItem = async (id: string, updates: Partial<Item>): Promise<vo
   const user = await getCurrentUser();
   if (!user) {
     throw new Error('User not authenticated');
+  }
+
+  // If price is being updated, record in price history
+  if (updates.price !== undefined) {
+    await recordPriceHistory(id, updates.price);
   }
 
   const { error } = await supabase
@@ -148,15 +166,12 @@ export const deleteItem = async (id: string): Promise<void> => {
 // Image upload function
 const uploadItemImage = async (imageUri: string, userId: string): Promise<string> => {
   try {
-    // Convert image URI to blob
     const response = await fetch(imageUri);
     const blob = await response.blob();
-    
-    // Generate unique filename
+
     const fileExt = imageUri.split('.').pop();
     const fileName = `${userId}/${Date.now()}.${fileExt}`;
-    
-    // Upload to Supabase Storage
+
     const { data, error } = await supabase.storage
       .from('item-images')
       .upload(fileName, blob, {
@@ -169,7 +184,6 @@ const uploadItemImage = async (imageUri: string, userId: string): Promise<string
       throw error;
     }
 
-    // Get public URL
     const { data: urlData } = supabase.storage
       .from('item-images')
       .getPublicUrl(fileName);
@@ -225,6 +239,32 @@ export const getShoppingLists = async (): Promise<ShoppingList[]> => {
   return data || [];
 };
 
+export const getSharedWithMeLists = async (): Promise<ShoppingList[]> => {
+  const user = await getCurrentUser();
+  if (!user) return [];
+
+  const { data: sharedData, error: sharedError } = await supabase
+    .from('shared_lists')
+    .select('list_id')
+    .eq('shared_with_email', user.email);
+
+  if (sharedError || !sharedData?.length) return [];
+
+  const listIds = sharedData.map(s => s.list_id);
+  const { data, error } = await supabase
+    .from('shopping_lists')
+    .select('*')
+    .in('id', listIds)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching shared lists:', error);
+    return [];
+  }
+
+  return (data || []).map(list => ({ ...list, is_shared: true }));
+};
+
 export const updateShoppingList = async (id: string, updates: Partial<ShoppingList>): Promise<void> => {
   const user = await getCurrentUser();
   if (!user) {
@@ -271,7 +311,6 @@ export const addItemToShoppingList = async (listId: string, itemId: string, quan
     throw new Error('User not authenticated');
   }
 
-  // First verify the shopping list belongs to the user
   const { data: list, error: listError } = await supabase
     .from('shopping_lists')
     .select('id')
@@ -283,7 +322,6 @@ export const addItemToShoppingList = async (listId: string, itemId: string, quan
     throw new Error('Shopping list not found or access denied');
   }
 
-  // Check if item already exists in the list
   const { data: existingItem, error: checkError } = await supabase
     .from('shopping_list_items')
     .select('*')
@@ -291,13 +329,12 @@ export const addItemToShoppingList = async (listId: string, itemId: string, quan
     .eq('item_id', itemId)
     .single();
 
-  if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
+  if (checkError && checkError.code !== 'PGRST116') {
     console.error('Error checking existing item:', checkError);
     throw checkError;
   }
 
   if (existingItem) {
-    // Update quantity if item already exists
     const { error: updateError } = await supabase
       .from('shopping_list_items')
       .update({
@@ -312,13 +349,13 @@ export const addItemToShoppingList = async (listId: string, itemId: string, quan
       throw updateError;
     }
   } else {
-    // Add new item to the list
     const { error: insertError } = await supabase
       .from('shopping_list_items')
       .insert({
         list_id: listId,
         item_id: itemId,
         quantity: quantity,
+        checked: false,
       });
 
     if (insertError) {
@@ -334,7 +371,6 @@ export const removeItemFromShoppingList = async (listId: string, itemId: string)
     throw new Error('User not authenticated');
   }
 
-  // First verify the shopping list belongs to the user
   const { data: list, error: listError } = await supabase
     .from('shopping_lists')
     .select('id')
@@ -358,13 +394,25 @@ export const removeItemFromShoppingList = async (listId: string, itemId: string)
   }
 };
 
+export const toggleShoppingListItemChecked = async (listId: string, itemId: string, checked: boolean): Promise<void> => {
+  const { error } = await supabase
+    .from('shopping_list_items')
+    .update({ checked })
+    .eq('list_id', listId)
+    .eq('item_id', itemId);
+
+  if (error) {
+    console.error('Error toggling item checked:', error);
+    throw error;
+  }
+};
+
 export const getShoppingListWithItems = async (listId: string): Promise<ShoppingList & { items: ShoppingListItemWithItem[] } | null> => {
   const user = await getCurrentUser();
   if (!user) {
     throw new Error('User not authenticated');
   }
 
-  // Get the shopping list
   const { data: list, error: listError } = await supabase
     .from('shopping_lists')
     .select('*')
@@ -376,7 +424,6 @@ export const getShoppingListWithItems = async (listId: string): Promise<Shopping
     return null;
   }
 
-  // Get the items in the shopping list
   const { data: listItems, error: itemsError } = await supabase
     .from('shopping_list_items')
     .select(`
@@ -394,4 +441,161 @@ export const getShoppingListWithItems = async (listId: string): Promise<Shopping
     ...list,
     items: listItems || [],
   };
+};
+
+// Budget functions
+export const createBudget = async (budgetData: CreateBudgetData): Promise<Budget> => {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('User not authenticated');
+
+  const { data, error } = await supabase
+    .from('budgets')
+    .insert({
+      user_id: user.id,
+      name: budgetData.name,
+      amount: budgetData.amount,
+      period: budgetData.period,
+      category: budgetData.category || null,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating budget:', error);
+    throw error;
+  }
+
+  return data;
+};
+
+export const getBudgets = async (): Promise<Budget[]> => {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('User not authenticated');
+
+  const { data, error } = await supabase
+    .from('budgets')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching budgets:', error);
+    throw error;
+  }
+
+  return data || [];
+};
+
+export const updateBudget = async (id: string, updates: Partial<Budget>): Promise<void> => {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('User not authenticated');
+
+  const { error } = await supabase
+    .from('budgets')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .eq('user_id', user.id);
+
+  if (error) {
+    console.error('Error updating budget:', error);
+    throw error;
+  }
+};
+
+export const deleteBudget = async (id: string): Promise<void> => {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('User not authenticated');
+
+  const { error } = await supabase
+    .from('budgets')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', user.id);
+
+  if (error) {
+    console.error('Error deleting budget:', error);
+    throw error;
+  }
+};
+
+// Price History functions
+export const recordPriceHistory = async (itemId: string, price: number): Promise<void> => {
+  const { error } = await supabase
+    .from('price_history')
+    .insert({ item_id: itemId, price });
+
+  if (error) {
+    console.error('Error recording price history:', error);
+    // Non-critical, don't throw
+  }
+};
+
+export const getPriceHistory = async (itemId: string): Promise<PriceHistory[]> => {
+  const { data, error } = await supabase
+    .from('price_history')
+    .select('*')
+    .eq('item_id', itemId)
+    .order('recorded_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching price history:', error);
+    return [];
+  }
+
+  return data || [];
+};
+
+// List Sharing functions
+export const shareList = async (listId: string, email: string, permission: 'view' | 'edit'): Promise<SharedList> => {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('User not authenticated');
+
+  const { data, error } = await supabase
+    .from('shared_lists')
+    .insert({
+      list_id: listId,
+      owner_id: user.id,
+      shared_with_email: email.toLowerCase(),
+      permission,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error sharing list:', error);
+    throw error;
+  }
+
+  return data;
+};
+
+export const getListShares = async (listId: string): Promise<SharedList[]> => {
+  const { data, error } = await supabase
+    .from('shared_lists')
+    .select('*')
+    .eq('list_id', listId)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching list shares:', error);
+    return [];
+  }
+
+  return data || [];
+};
+
+export const revokeShare = async (shareId: string): Promise<void> => {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('User not authenticated');
+
+  const { error } = await supabase
+    .from('shared_lists')
+    .delete()
+    .eq('id', shareId)
+    .eq('owner_id', user.id);
+
+  if (error) {
+    console.error('Error revoking share:', error);
+    throw error;
+  }
 };
